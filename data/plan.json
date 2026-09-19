@@ -1,0 +1,130 @@
+{
+  "version": 3,
+  "activePlanId": "plan-personal-wants",
+  "settings": {
+    "currency": {
+      "code": "USD",
+      "symbol": "$",
+      "position": "prefix",
+      "decimals": 0
+    }
+  },
+  "plans": [
+    {
+      "id": "plan-personal-wants",
+      "name": "Personal Wants & Tech",
+      "description": "Gadgets, personal gear, and leisure wishlist.",
+      "icon": "laptop",
+      "color": "violet",
+      "config": {
+        "name": "Personal Wants & Tech",
+        "currentAmountSaved": 700,
+        "amountToSave": 300,
+        "frequency": "monthly",
+        "savingsDayOfMonth": 25,
+        "firstSavingDate": "2026-09-19",
+        "emergencyBuffer": 200,
+        "annualInterestRate": 0
+      },
+      "items": [
+        {
+          "id": "wish-p1",
+          "title": "Sony WH-1000XM5 Headphones",
+          "price": 350,
+          "category": "Tech",
+          "priority": 1,
+          "url": "https://www.sony.com",
+          "notes": "For focused coding and peaceful travel.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        },
+        {
+          "id": "wish-p2",
+          "title": "Ergonomic Mechanical Keyboard & Wrist Rest",
+          "price": 220,
+          "category": "Tech",
+          "priority": 2,
+          "notes": "Custom tactile switches for daily programming.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        },
+        {
+          "id": "wish-p3",
+          "title": "Weekend Cabin Trip",
+          "price": 500,
+          "category": "Travel",
+          "priority": 3,
+          "notes": "Hiking getaway in nature.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        }
+      ],
+      "createdAt": "2026-09-19T14:52:36.484Z",
+      "updatedAt": "2026-09-19T14:52:36.484Z"
+    },
+    {
+      "id": "plan-house-needs",
+      "name": "House & Living Needs",
+      "description": "Home renovations, furniture, and household appliances.",
+      "icon": "home",
+      "color": "amber",
+      "config": {
+        "name": "House & Living Needs",
+        "currentAmountSaved": 1500,
+        "amountToSave": 450,
+        "frequency": "monthly",
+        "savingsDayOfMonth": 25,
+        "firstSavingDate": "2026-09-19",
+        "emergencyBuffer": 500,
+        "annualInterestRate": 0
+      },
+      "items": [
+        {
+          "id": "wish-h1",
+          "title": "Smart Thermostat & Energy Monitor",
+          "price": 250,
+          "category": "Home & Living",
+          "priority": 1,
+          "notes": "Automate heating and reduce winter energy bills.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        },
+        {
+          "id": "wish-h2",
+          "title": "Kitchen Dishwasher Upgrade",
+          "price": 750,
+          "category": "Home & Living",
+          "priority": 2,
+          "notes": "Quiet, energy-efficient model for the kitchen.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        },
+        {
+          "id": "wish-h3",
+          "title": "Solid Oak Living Room Bookshelf",
+          "price": 600,
+          "category": "Home & Living",
+          "priority": 3,
+          "notes": "Storage for books, plants, and records.",
+          "isPurchased": false,
+          "isPaused": false,
+          "createdAt": "2026-09-19T14:52:36.484Z",
+          "updatedAt": "2026-09-19T14:52:36.484Z"
+        }
+      ],
+      "createdAt": "2026-09-19T14:52:36.484Z",
+      "updatedAt": "2026-09-19T14:52:36.484Z"
+    }
+  ],
+  "lastSaved": "2026-09-19T14:52:46.588Z"
+}

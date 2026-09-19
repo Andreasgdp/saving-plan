@@ -1,0 +1,182 @@
+import React, { useState, useEffect } from 'react';
+import { X, Globe, Coins } from 'lucide-react';
+import type { CurrencyConfig, GlobalSettings } from '../types/plan';
+import { CURRENCY_PRESETS } from '../utils/currency';
+import { ModalBackdrop } from './ModalBackdrop';
+
+interface GlobalSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  settings: GlobalSettings;
+  onSaveSettings: (newSettings: GlobalSettings) => void;
+}
+
+export const GlobalSettingsModal: React.FC<GlobalSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  settings,
+  onSaveSettings,
+}) => {
+  const [selectedCurrencyCode, setSelectedCurrencyCode] = useState(settings.currency.code);
+  const [customSymbol, setCustomSymbol] = useState(settings.currency.symbol);
+  const [position, setPosition] = useState<'prefix' | 'suffix'>(settings.currency.position);
+  const [decimals, setDecimals] = useState<number>(settings.currency.decimals);
+
+  useEffect(() => {
+    setSelectedCurrencyCode(settings.currency.code);
+    setCustomSymbol(settings.currency.symbol);
+    setPosition(settings.currency.position);
+    setDecimals(settings.currency.decimals);
+  }, [settings, isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    let currency: CurrencyConfig;
+    if (selectedCurrencyCode in CURRENCY_PRESETS) {
+      const preset = CURRENCY_PRESETS[selectedCurrencyCode];
+      currency = {
+        ...preset,
+        decimals,
+      };
+    } else {
+      currency = {
+        code: selectedCurrencyCode.trim() || 'CUSTOM',
+        symbol: customSymbol.trim() || 'kr',
+        position,
+        decimals,
+      };
+    }
+
+    onSaveSettings({
+      currency,
+    });
+
+    onClose();
+  };
+
+  return (
+    <ModalBackdrop isOpen={isOpen} onClose={onClose}>
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Global App Settings
+              </h2>
+              <p className="text-xs text-slate-500">Configure site-wide currency & preferences</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+              Global Currency
+            </label>
+            <div className="relative">
+              <Coins className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <select
+                value={selectedCurrencyCode}
+                onChange={e => {
+                  const code = e.target.value;
+                  setSelectedCurrencyCode(code);
+                  if (code in CURRENCY_PRESETS) {
+                    setPosition(CURRENCY_PRESETS[code].position);
+                    setCustomSymbol(CURRENCY_PRESETS[code].symbol);
+                  }
+                }}
+                className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+              >
+                {Object.keys(CURRENCY_PRESETS).map(code => (
+                  <option key={code} value={code}>
+                    {code} ({CURRENCY_PRESETS[code].symbol})
+                  </option>
+                ))}
+                <option value="CUSTOM">Custom Currency Symbol</option>
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Applies across all savings plans and calculations site-wide.
+            </p>
+          </div>
+
+          {selectedCurrencyCode === 'CUSTOM' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Currency Symbol
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customSymbol}
+                  onChange={e => setCustomSymbol(e.target.value)}
+                  placeholder="e.g. kr, $, €"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Symbol Position
+                </label>
+                <select
+                  value={position}
+                  onChange={e => setPosition(e.target.value as 'prefix' | 'suffix')}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white"
+                >
+                  <option value="suffix">Suffix (1,000 kr)</option>
+                  <option value="prefix">Prefix ($1,000)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+            <span className="text-xs text-slate-500">Format Preview:</span>
+            <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
+              {selectedCurrencyCode in CURRENCY_PRESETS
+                ? CURRENCY_PRESETS[selectedCurrencyCode].position === 'prefix'
+                  ? `${CURRENCY_PRESETS[selectedCurrencyCode].symbol}1,250`
+                  : `1,250 ${CURRENCY_PRESETS[selectedCurrencyCode].symbol}`
+                : position === 'prefix'
+                ? `${customSymbol}1,250`
+                : `1,250 ${customSymbol}`}
+            </span>
+          </div>
+
+          {/* Footer */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-xs font-semibold rounded-xl bg-brand-600 hover:bg-brand-700 text-white shadow-md shadow-brand-600/20 active:scale-95 transition-all"
+            >
+              Save Settings
+            </button>
+          </div>
+        </form>
+      </div>
+    </ModalBackdrop>
+  );
+};
