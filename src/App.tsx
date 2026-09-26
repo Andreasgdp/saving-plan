@@ -1,12 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import { Toaster } from 'sonner';
 import confetti from 'canvas-confetti';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { PlanActionsBar } from './components/PlanActionsBar';
-import { useAppAuth, useModalRegistry, usePlanManager } from './hooks';
-import type { Plan } from './types/plan';
+import {
+  useAppAuth,
+  useModalRegistry,
+  usePlanManager,
+  type PlanManagerActions,
+  type ModalRegistry,
+} from './hooks';
+import type {
+  Plan,
+  AppStoreData,
+  PlanCalculationResult,
+  PlanConfig,
+  PortfolioSummary,
+} from './types/plan';
 import { Header } from './components/Header';
+import { LandingPage } from './components/LandingPage';
 import { MetricsOverview } from './components/MetricsOverview';
 import { WishList } from './components/WishList';
 import { WishModal } from './components/WishModal';
@@ -25,124 +39,132 @@ import { SupportModal } from './components/SupportModal';
 import { ActivationWallModal } from './components/ActivationWallModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { ConfirmDialogModal } from './components/ConfirmDialogModal';
+import { NotFoundPage } from './components/NotFoundPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { useTheme } from './context/ThemeContext';
-import { DEFAULT_PLANS } from './utils/defaults';
+import { DEFAULT_PLANS, getDefaultStoreData } from './utils/defaults';
+import { InMemoryStorageRepository } from './storage';
 
-export const AppContent: React.FC = () => {
-  const { darkMode, toggleDarkMode } = useTheme();
-  const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAppAuth();
-  const clerk = useClerk();
+interface AppDashboardProps {
+  isDemo?: boolean;
+  storeData: AppStoreData;
+  activePlan: Plan;
+  activePlanCalculation: PlanCalculationResult;
+  effectiveConfig: PlanConfig;
+  portfolioSummary: PortfolioSummary;
+  isPortfolioView: boolean;
+  setIsPortfolioView: (isPortfolio: boolean) => void;
+  showWhatIf: boolean;
+  simulatedSavingsRate: number;
+  simulatedExtraBonus: number;
+  actions: PlanManagerActions;
+  darkMode: boolean;
+  toggleDarkMode: () => void;
+  modal: ModalRegistry;
+  planManageMode: 'create' | 'edit';
+  isQuickAdd: boolean;
+  setIsQuickAdd: (isQuickAdd: boolean) => void;
+  isActivated: boolean;
+  hasSeenOnboarding: boolean;
+  handleActivate: (code: string) => boolean;
+  handleCloseOnboarding: () => void;
+  handleConfirmLoadSamplePlan: () => void;
+  handleOpenCreatePlanModal: () => void;
+  handleOpenEditPlanModal: (planToEdit?: Plan) => void;
+}
 
-  const [authTimedOut, setAuthTimedOut] = useState(false);
+const AppDashboard: React.FC<AppDashboardProps> = ({
+  isDemo = false,
+  storeData,
+  activePlan,
+  activePlanCalculation,
+  effectiveConfig,
+  portfolioSummary,
+  isPortfolioView,
+  setIsPortfolioView,
+  showWhatIf,
+  simulatedSavingsRate,
+  simulatedExtraBonus,
+  actions,
+  darkMode,
+  toggleDarkMode,
+  modal,
+  planManageMode,
+  isQuickAdd,
+  setIsQuickAdd,
+  isActivated,
+  hasSeenOnboarding,
+  handleActivate,
+  handleCloseOnboarding,
+  handleConfirmLoadSamplePlan,
+  handleOpenCreatePlanModal,
+  handleOpenEditPlanModal,
+}) => {
+  const { planId } = useParams<{ planId?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
 
+  const basePath = isDemo ? '/demo' : '/app';
+
+  // Route synchronization
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setAuthTimedOut(true);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const modal = useModalRegistry();
-  const [planManageMode, setPlanManageMode] = useState<'create' | 'edit'>('create');
-  const [isQuickAdd, setIsQuickAdd] = useState(false);
-
-  const [isActivated, setIsActivated] = useState<boolean>(() => {
-    return localStorage.getItem('saving_plan_activated') === 'true';
-  });
-
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean>(() => {
-    return localStorage.getItem('saving_plan_onboarding_seen') === 'true';
-  });
-
-  const {
-    storeData,
-    activePlan,
-    activePlanCalculation,
-    effectiveConfig,
-    portfolioSummary,
-    isLoading,
-    isPortfolioView,
-    setIsPortfolioView,
-    showWhatIf,
-    simulatedSavingsRate,
-    simulatedExtraBonus,
-    actions,
-  } = usePlanManager({
-    isAuthLoaded,
-    isSignedIn,
-    getToken,
-  });
-
-  const handleOpenCreatePlanModal = () => {
-    setPlanManageMode('create');
-    modal.open('createPlan');
-  };
-
-  const handleOpenEditPlanModal = (planToEdit: Plan = activePlan) => {
-    setPlanManageMode('edit');
-    modal.open('editPlan', { plan: planToEdit });
-  };
-
-  const handleActivate = (code: string) => {
-    const validCode = (import.meta.env.VITE_DEV_ACTIVATION_CODE || 'SAVINGS2026')
-      .trim()
-      .toLowerCase();
-    if (code.toLowerCase() === validCode) {
-      localStorage.setItem('saving_plan_activated', 'true');
-      setIsActivated(true);
-      modal.close();
-      try {
-        clerk.openSignIn?.();
-      } catch {
-        // Ignore sign-in open errors if Clerk is unconfigured
+    if (location.pathname === `${basePath}/portfolio`) {
+      if (!isPortfolioView) {
+        setIsPortfolioView(true);
       }
-      return true;
+    } else if (planId) {
+      if (isPortfolioView) {
+        setIsPortfolioView(false);
+      }
+      if (storeData.activePlanId !== planId) {
+        const planExists = storeData.plans.some(p => p.id === planId);
+        if (planExists) {
+          actions.selectPlan(planId);
+        }
+      }
+    } else if (location.pathname === basePath) {
+      // Maintain active plan or portfolio according to state
     }
-    return false;
-  };
+  }, [
+    location.pathname,
+    planId,
+    isPortfolioView,
+    storeData.activePlanId,
+    storeData.plans,
+    actions,
+    setIsPortfolioView,
+    basePath,
+  ]);
 
-  const handleCloseOnboarding = () => {
-    localStorage.setItem('saving_plan_onboarding_seen', 'true');
-    setHasSeenOnboarding(true);
-    modal.close();
-  };
+  // Sync route URL if activePlanId changes while viewing a plan
+  useEffect(() => {
+    if (!isPortfolioView && storeData.activePlanId) {
+      if (
+        location.pathname.startsWith(`${basePath}/plan/`) &&
+        planId &&
+        planId !== storeData.activePlanId &&
+        storeData.plans.some(p => p.id === planId)
+      ) {
+        const activePlanExists = storeData.plans.some(p => p.id === storeData.activePlanId);
+        if (activePlanExists) {
+          navigate(`${basePath}/plan/${storeData.activePlanId}`, { replace: true });
+        }
+      }
+    }
+  }, [
+    storeData.activePlanId,
+    storeData.plans,
+    isPortfolioView,
+    location.pathname,
+    planId,
+    navigate,
+    basePath,
+  ]);
 
-  const handleConfirmLoadSamplePlan = () => {
-    modal.open('confirmDialog', {
-      confirm: {
-        title: 'Load Interactive Sample Plan',
-        description:
-          'Loading the sample plan will replace your current savings plans and wishlists with sample data. Do you wish to continue?',
-        confirmLabel: 'Load Sample Data',
-        variant: 'warning',
-        onConfirm: () => {
-          actions.importStoreData({
-            version: 3,
-            lastSaved: new Date().toISOString(),
-            activePlanId: DEFAULT_PLANS[0].id,
-            plans: DEFAULT_PLANS,
-            settings: storeData.settings,
-          });
-        },
-      },
-    });
-  };
-
-  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
-  const isPlaceholderKey =
-    !clerkKey || clerkKey.includes('placeholder') || clerkKey.includes('Y2xlcms');
-  const shouldBlockAuth = !isAuthLoaded && !authTimedOut && !isPlaceholderKey;
-
-  if (isLoading || shouldBlockAuth) {
+  // Render 404 if planId param was requested in plan route but does not exist
+  if (planId && !storeData.plans.some(p => p.id === planId)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <ThinkingOrbLoader
-          state="searching"
-          size={64}
-          label="Loading your savings plans..."
-          dark={darkMode}
-        />
-      </div>
+      <NotFoundPage onReturnToApp={() => navigate(basePath)} onGoToLanding={() => navigate('/')} />
     );
   }
 
@@ -152,13 +174,23 @@ export const AppContent: React.FC = () => {
 
       {/* Header */}
       <Header
+        isDemo={isDemo}
         plans={storeData.plans}
         activePlanId={storeData.activePlanId}
         isPortfolioView={isPortfolioView}
         activePlanCalculation={activePlanCalculation}
         darkMode={darkMode}
-        onSelectPlan={actions.selectPlan}
-        onSelectPortfolio={() => setIsPortfolioView(true)}
+        viewMode={location.pathname === '/' ? 'landing' : 'app'}
+        onNavigateLanding={() => navigate('/')}
+        onNavigateApp={() => navigate('/app')}
+        onSelectPlan={id => {
+          actions.selectPlan(id);
+          navigate(`${basePath}/plan/${id}`);
+        }}
+        onSelectPortfolio={() => {
+          setIsPortfolioView(true);
+          navigate(`${basePath}/portfolio`);
+        }}
         onOpenNewPlanModal={handleOpenCreatePlanModal}
         onOpenManagePlanModal={() => handleOpenEditPlanModal(activePlan)}
         onToggleDarkMode={toggleDarkMode}
@@ -180,7 +212,10 @@ export const AppContent: React.FC = () => {
           <PortfolioOverview
             plans={storeData.plans}
             summary={portfolioSummary}
-            onSelectPlan={actions.selectPlan}
+            onSelectPlan={id => {
+              actions.selectPlan(id);
+              navigate(`${basePath}/plan/${id}`);
+            }}
             onOpenNewPlanModal={handleOpenCreatePlanModal}
             onEditPlan={handleOpenEditPlanModal}
           />
@@ -347,13 +382,13 @@ export const AppContent: React.FC = () => {
           }
           modal.close();
         }}
-        onDuplicatePlan={planId => {
-          actions.duplicatePlan(planId);
+        onDuplicatePlan={planIdToDup => {
+          actions.duplicatePlan(planIdToDup);
           modal.close();
         }}
-        onDeletePlan={planId => {
+        onDeletePlan={planIdToDelete => {
           modal.close();
-          const targetPlan = storeData.plans.find(p => p.id === planId);
+          const targetPlan = storeData.plans.find(p => p.id === planIdToDelete);
           setTimeout(() => {
             modal.open('confirmDialog', {
               confirm: {
@@ -361,7 +396,7 @@ export const AppContent: React.FC = () => {
                 description: `Are you sure you want to delete "${targetPlan?.name || 'this plan'}"?`,
                 confirmLabel: 'Delete Plan',
                 variant: 'danger',
-                onConfirm: () => actions.deletePlan(planId),
+                onConfirm: () => actions.deletePlan(planIdToDelete),
               },
             });
           }, 150);
@@ -440,6 +475,353 @@ export const AppContent: React.FC = () => {
         />
       )}
     </div>
+  );
+};
+
+export const LandingPageWorkspace: React.FC = () => {
+  const { darkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <Toaster position="bottom-right" theme={darkMode ? 'dark' : 'light'} richColors />
+      <LandingPage
+        onLaunchApp={() => navigate('/app')}
+        onExploreDemo={() => navigate('/demo')}
+        onToggleDarkMode={toggleDarkMode}
+        darkMode={darkMode}
+      />
+    </>
+  );
+};
+
+export const DemoAppWorkspace: React.FC = () => {
+  const { darkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
+  const modal = useModalRegistry();
+
+  const [planManageMode, setPlanManageMode] = useState<'create' | 'edit'>('create');
+  const [isQuickAdd, setIsQuickAdd] = useState(false);
+
+  const [isActivated, setIsActivated] = useState<boolean>(() => {
+    return localStorage.getItem('saving_plan_activated') === 'true';
+  });
+
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('saving_plan_onboarding_seen') === 'true';
+  });
+
+  // Demo Plan Manager (pre-populated with DEFAULT_PLANS sample data)
+  const demoRepo = useMemo(() => new InMemoryStorageRepository(getDefaultStoreData()), []);
+  const demoPlanManager = usePlanManager({ repository: demoRepo });
+
+  const handleOpenCreatePlanModal = () => {
+    setPlanManageMode('create');
+    modal.open('createPlan');
+  };
+
+  const handleOpenEditPlanModal = (planToEdit?: Plan) => {
+    const targetPlan = planToEdit || demoPlanManager.activePlan;
+    setPlanManageMode('edit');
+    modal.open('editPlan', { plan: targetPlan });
+  };
+
+  const handleActivate = (code: string) => {
+    const validCode = (import.meta.env.VITE_DEV_ACTIVATION_CODE || 'SAVINGS2026')
+      .trim()
+      .toLowerCase();
+    if (code.toLowerCase() === validCode) {
+      localStorage.setItem('saving_plan_activated', 'true');
+      setIsActivated(true);
+      modal.close();
+      return true;
+    }
+    return false;
+  };
+
+  const handleCloseOnboarding = () => {
+    localStorage.setItem('saving_plan_onboarding_seen', 'true');
+    setHasSeenOnboarding(true);
+    modal.close();
+  };
+
+  const handleConfirmLoadSamplePlan = () => {
+    modal.open('confirmDialog', {
+      confirm: {
+        title: 'Load Interactive Sample Plan',
+        description:
+          'Loading the sample plan will replace your current savings plans and wishlists with sample data. Do you wish to continue?',
+        confirmLabel: 'Load Sample Data',
+        variant: 'warning',
+        onConfirm: () => {
+          demoPlanManager.actions.importStoreData({
+            version: 3,
+            lastSaved: new Date().toISOString(),
+            activePlanId: DEFAULT_PLANS[0].id,
+            plans: DEFAULT_PLANS,
+            settings: demoPlanManager.storeData.settings,
+          });
+        },
+      },
+    });
+  };
+
+  const demoDashboardProps = {
+    storeData: demoPlanManager.storeData,
+    activePlan: demoPlanManager.activePlan,
+    activePlanCalculation: demoPlanManager.activePlanCalculation,
+    effectiveConfig: demoPlanManager.effectiveConfig,
+    portfolioSummary: demoPlanManager.portfolioSummary,
+    isPortfolioView: demoPlanManager.isPortfolioView,
+    setIsPortfolioView: demoPlanManager.setIsPortfolioView,
+    showWhatIf: demoPlanManager.showWhatIf,
+    simulatedSavingsRate: demoPlanManager.simulatedSavingsRate,
+    simulatedExtraBonus: demoPlanManager.simulatedExtraBonus,
+    actions: demoPlanManager.actions,
+    darkMode,
+    toggleDarkMode,
+    modal,
+    planManageMode,
+    isQuickAdd,
+    setIsQuickAdd,
+    isActivated,
+    hasSeenOnboarding,
+    handleActivate,
+    handleCloseOnboarding,
+    handleConfirmLoadSamplePlan,
+    handleOpenCreatePlanModal,
+    handleOpenEditPlanModal: (planToEdit?: Plan) => handleOpenEditPlanModal(planToEdit),
+  };
+
+  return (
+    <Routes>
+      <Route path="/" element={<AppDashboard {...demoDashboardProps} isDemo={true} />} />
+      <Route
+        path="/plan/:planId"
+        element={<AppDashboard {...demoDashboardProps} isDemo={true} />}
+      />
+      <Route path="/portfolio" element={<AppDashboard {...demoDashboardProps} isDemo={true} />} />
+      <Route
+        path="*"
+        element={
+          <NotFoundPage
+            onReturnToApp={() => navigate('/demo')}
+            onGoToLanding={() => navigate('/')}
+          />
+        }
+      />
+    </Routes>
+  );
+};
+
+export const ProtectedAppWorkspace: React.FC = () => {
+  const { darkMode, toggleDarkMode } = useTheme();
+  const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAppAuth();
+  const clerk = useClerk();
+  const navigate = useNavigate();
+
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAuthTimedOut(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const modal = useModalRegistry();
+  const [planManageMode, setPlanManageMode] = useState<'create' | 'edit'>('create');
+  const [isQuickAdd, setIsQuickAdd] = useState(false);
+
+  const [isActivated, setIsActivated] = useState<boolean>(() => {
+    return localStorage.getItem('saving_plan_activated') === 'true';
+  });
+
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('saving_plan_onboarding_seen') === 'true';
+  });
+
+  // App Plan Manager (for real protected app routes)
+  const appPlanManager = usePlanManager({
+    isAuthLoaded,
+    isSignedIn,
+    getToken,
+  });
+
+  const handleOpenCreatePlanModal = () => {
+    setPlanManageMode('create');
+    modal.open('createPlan');
+  };
+
+  const handleOpenEditPlanModal = (planToEdit?: Plan) => {
+    const targetPlan = planToEdit || appPlanManager.activePlan;
+    setPlanManageMode('edit');
+    modal.open('editPlan', { plan: targetPlan });
+  };
+
+  const handleActivate = (code: string) => {
+    const validCode = (import.meta.env.VITE_DEV_ACTIVATION_CODE || 'SAVINGS2026')
+      .trim()
+      .toLowerCase();
+    if (code.toLowerCase() === validCode) {
+      localStorage.setItem('saving_plan_activated', 'true');
+      setIsActivated(true);
+      modal.close();
+      try {
+        clerk.openSignIn?.();
+      } catch {
+        // Ignore sign-in open errors if Clerk is unconfigured
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const handleCloseOnboarding = () => {
+    localStorage.setItem('saving_plan_onboarding_seen', 'true');
+    setHasSeenOnboarding(true);
+    modal.close();
+  };
+
+  const handleConfirmLoadSamplePlan = () => {
+    modal.open('confirmDialog', {
+      confirm: {
+        title: 'Load Interactive Sample Plan',
+        description:
+          'Loading the sample plan will replace your current savings plans and wishlists with sample data. Do you wish to continue?',
+        confirmLabel: 'Load Sample Data',
+        variant: 'warning',
+        onConfirm: () => {
+          appPlanManager.actions.importStoreData({
+            version: 3,
+            lastSaved: new Date().toISOString(),
+            activePlanId: DEFAULT_PLANS[0].id,
+            plans: DEFAULT_PLANS,
+            settings: appPlanManager.storeData.settings,
+          });
+        },
+      },
+    });
+  };
+
+  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+  const isPlaceholderKey =
+    !clerkKey || clerkKey.includes('placeholder') || clerkKey.includes('Y2xlcms');
+  const shouldBlockAuth = !isAuthLoaded && !authTimedOut && !isPlaceholderKey;
+
+  if (appPlanManager.isLoading || shouldBlockAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <ThinkingOrbLoader
+          state="searching"
+          size={64}
+          label="Loading your savings plans..."
+          dark={darkMode}
+        />
+      </div>
+    );
+  }
+
+  const appDashboardProps = {
+    storeData: appPlanManager.storeData,
+    activePlan: appPlanManager.activePlan,
+    activePlanCalculation: appPlanManager.activePlanCalculation,
+    effectiveConfig: appPlanManager.effectiveConfig,
+    portfolioSummary: appPlanManager.portfolioSummary,
+    isPortfolioView: appPlanManager.isPortfolioView,
+    setIsPortfolioView: appPlanManager.setIsPortfolioView,
+    showWhatIf: appPlanManager.showWhatIf,
+    simulatedSavingsRate: appPlanManager.simulatedSavingsRate,
+    simulatedExtraBonus: appPlanManager.simulatedExtraBonus,
+    actions: appPlanManager.actions,
+    darkMode,
+    toggleDarkMode,
+    modal,
+    planManageMode,
+    isQuickAdd,
+    setIsQuickAdd,
+    isActivated,
+    hasSeenOnboarding,
+    handleActivate,
+    handleCloseOnboarding,
+    handleConfirmLoadSamplePlan,
+    handleOpenCreatePlanModal,
+    handleOpenEditPlanModal: (planToEdit?: Plan) => handleOpenEditPlanModal(planToEdit),
+  };
+
+  return (
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute
+              isActivated={isActivated}
+              onOpenActivationModal={() => modal.open('activation')}
+            >
+              <AppDashboard {...appDashboardProps} isDemo={false} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/plan/:planId"
+          element={
+            <ProtectedRoute
+              isActivated={isActivated}
+              onOpenActivationModal={() => modal.open('activation')}
+            >
+              <AppDashboard {...appDashboardProps} isDemo={false} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portfolio"
+          element={
+            <ProtectedRoute
+              isActivated={isActivated}
+              onOpenActivationModal={() => modal.open('activation')}
+            >
+              <AppDashboard {...appDashboardProps} isDemo={false} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <NotFoundPage
+              onReturnToApp={() => navigate('/app')}
+              onGoToLanding={() => navigate('/')}
+            />
+          }
+        />
+      </Routes>
+      <ActivationWallModal
+        isOpen={modal.isOpen('activation')}
+        onClose={modal.close}
+        onActivate={handleActivate}
+      />
+    </>
+  );
+};
+
+export const AppContent: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPageWorkspace />} />
+      <Route path="/demo/*" element={<DemoAppWorkspace />} />
+      <Route path="/app/*" element={<ProtectedAppWorkspace />} />
+      <Route
+        path="*"
+        element={
+          <NotFoundPage
+            onReturnToApp={() => navigate('/app')}
+            onGoToLanding={() => navigate('/')}
+          />
+        }
+      />
+    </Routes>
   );
 };
 
